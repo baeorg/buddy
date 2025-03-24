@@ -1,0 +1,9 @@
+[server]
+webaddr = "0.0.0.0:8762"
+wsaddr = "0.0.0.0:8760"
+
+[db]
+path="/Users/mobus/tmp/budy.db"
+
+[mq]
+path="/Users/mobus/tmp/budy.mq"

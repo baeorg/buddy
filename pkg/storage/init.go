@@ -1,0 +1,329 @@
+package storage
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"log/slog"
+	"time"
+
+	"github.com/baeorg/buddy/pkg/share"
+	"github.com/sunvim/gmdbx"
+	"github.com/sunvim/mq"
+	"github.com/vmihailenco/msgpack/v5"
+	"go.uber.org/atomic"
+)
+
+var (
+	defaultGeometry = gmdbx.Geometry{
+		SizeLower:       4 * share.MB,
+		SizeNow:         4 * share.MB,
+		SizeUpper:       4 * share.TB,
+		GrowthStep:      16 * share.MB,
+		ShrinkThreshold: 64 * share.MB,
+		PageSize:        64 * share.KB,
+	}
+	defaultFlags = gmdbx.EnvSyncDurable |
+		gmdbx.EnvWriteMap |
+		gmdbx.EnvLIFOReclaim |
+		gmdbx.EnvCoalesce | gmdbx.EnvNoSubDir
+)
+
+const (
+	SubDBSize       = 6
+	SubDBUsers      = "users"       // store user info
+	SubDBRels       = "user:rels"   // store user relationships
+	SubDBConvsUsers = "convs:users" // store conversation users
+	SubDBConvsMesgs = "convs:mesgs" // store conversation messages
+	SubDBMesgs      = "mesgs"       // store messages
+	SubDBEnv        = "env"         // store environment variables
+)
+
+var (
+	SeqmConvs string = "convs:id" // conversation id
+	SeqmMesgs string = "mesgs:id" // message id
+)
+
+type DB struct {
+	mesgeq     *mq.MessageQueue
+	seqm       map[string]*atomic.Uint64
+	env        *gmdbx.Env
+	users      gmdbx.DBI
+	rels       gmdbx.DBI
+	convsUsers gmdbx.DBI
+	convsMesgs gmdbx.DBI
+	mesgs      gmdbx.DBI
+	genv       gmdbx.DBI
+}
+
+func New(ctx context.Context, path string, mqPath string) *DB {
+	db := &DB{}
+
+	env, err := gmdbx.NewEnv()
+	if err != gmdbx.ErrSuccess {
+		panic(err)
+	}
+	db.env = env
+
+	err = env.SetMaxDBS(SubDBSize)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("set max dbs failed: ", err)
+	}
+
+	err = env.SetGeometry(defaultGeometry)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("set geometry failed: ", err)
+	}
+
+	err = env.SetOption(gmdbx.OptTxnDpLimit, 10240)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("set txn dp limit failed: ", err)
+	}
+
+	err = env.SetOption(gmdbx.OptMaxReaders, 10240)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("set max readers failed: ", err)
+	}
+
+	err = env.Open(path, defaultFlags, 0664)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("open db failed: ", err)
+	}
+
+	// init sub dbs
+	tx := &gmdbx.Tx{}
+	if err = env.Begin(tx, gmdbx.TxReadWrite); err != gmdbx.ErrSuccess {
+		log.Fatal("open tx failed: ", err)
+	}
+	defer tx.Commit()
+
+	db.users, err = tx.OpenDBI(SubDBUsers, gmdbx.DBCreate|gmdbx.DBIntegerKey)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("open users db failed: ", err)
+	}
+
+	db.rels, err = tx.OpenDBI(SubDBRels, gmdbx.DBCreate|gmdbx.DBDupSort)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("open rels db failed: ", err)
+	}
+
+	db.convsUsers, err = tx.OpenDBI(SubDBConvsUsers, gmdbx.DBCreate|gmdbx.DBIntegerKey)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("open convs db failed: ", err)
+	}
+
+	db.convsMesgs, err = tx.OpenDBI(SubDBConvsMesgs, gmdbx.DBCreate|gmdbx.DBIntegerKey)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("open convs db failed: ", err)
+	}
+
+	db.mesgs, err = tx.OpenDBI(SubDBMesgs, gmdbx.DBCreate|gmdbx.DBIntegerKey)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("open mesgs db failed: ", err)
+	}
+
+	db.genv, err = tx.OpenDBI(SubDBEnv, gmdbx.DBCreate)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("open freinds db failed: ", err)
+	}
+
+	mesgeq, gerr := mq.NewMessageQueue(mqPath, 256<<20, 0)
+	if gerr != nil {
+		log.Fatal("open message queue failed: ", gerr)
+	}
+	db.mesgeq = mesgeq
+	db.seqm = make(map[string]*atomic.Uint64)
+
+	// init message id
+	mesgid := gmdbx.String(&SeqmMesgs)
+	mesgval := gmdbx.Val{}
+	err = tx.Get(db.genv, &mesgid, &mesgval)
+	if err != gmdbx.ErrSuccess && err != gmdbx.ErrNotFound {
+		log.Fatal("init message id failed: ", err)
+	}
+
+	if err == gmdbx.ErrNotFound {
+		db.seqm[SeqmMesgs] = atomic.NewUint64(0)
+	} else {
+		db.seqm[SeqmMesgs] = atomic.NewUint64(mesgval.U64())
+	}
+
+	// init conversation id
+	convid := gmdbx.String(&SeqmConvs)
+	convval := gmdbx.Val{}
+	db.seqm[SeqmConvs] = atomic.NewUint64(0)
+
+	err = tx.Get(db.genv, &convid, &convval)
+	if err != gmdbx.ErrSuccess && err != gmdbx.ErrNotFound {
+		log.Fatal("init conversation id failed: ", err)
+	}
+	if err == gmdbx.ErrNotFound {
+		db.seqm[SeqmConvs] = atomic.NewUint64(0)
+	} else {
+		db.seqm[SeqmConvs] = atomic.NewUint64(mesgval.U64())
+	}
+
+	// remove message which is consumed every 30 seconds
+	go func(ctx context.Context) {
+		slog.Info("start remove message goroutine")
+		tick := time.Tick(30 * time.Second)
+		for {
+			select {
+			case <-ctx.Done():
+				db.mesgeq.Close()
+				slog.Info("mq closed")
+				return
+			case <-tick:
+				err := db.mesgeq.DeleteConsumedMessages()
+				if err != nil {
+					slog.Error("delete consumed messages failed: ", "err", err)
+				}
+			}
+		}
+	}(ctx)
+
+	// batch wirte data into database
+	go func(ctx context.Context) {
+
+		var (
+			mi   MesgInfo
+			gerr gmdbx.Error
+		)
+
+		for {
+			select {
+			case <-ctx.Done():
+				// save sequence
+				msq := db.seqm[SeqmMesgs].Load()
+				mesgval := gmdbx.U64(&msq)
+				wtx, err := db.Wtx()
+				if err != nil {
+					slog.Error("save sequence tx failed: ", "err", err)
+				}
+				genv := db.genv
+				wtx.Put(genv, &mesgid, &mesgval, gmdbx.PutUpsert)
+
+				conv := db.seqm[SeqmConvs].Load()
+				convval := gmdbx.U64(&conv)
+				wtx.Put(genv, &convid, &convval, gmdbx.PutUpsert)
+
+				wtx.Commit()
+
+				slog.Info("sequence saved")
+				// close database
+				db.Close()
+				slog.Info("database closed")
+				return
+			default:
+				mesgs, err := db.mesgeq.PopAll()
+				if err != nil {
+					slog.Error("pop message failed: ", "err", err)
+					continue
+				}
+
+				if len(mesgs) == 0 {
+					time.Sleep(200 * time.Millisecond)
+					continue
+				}
+
+				wtx, err := db.Wtx()
+				if err != nil {
+					slog.Error("begin write tx failed: ", "err", err)
+					continue
+				}
+
+				// write data into database
+				for _, mesg := range mesgs {
+					err := msgpack.Unmarshal(mesg.Data, &mi)
+					if err != nil {
+						slog.Error("unmarshal message failed: ", "err", err)
+						continue
+					}
+
+					switch mi.MsgType {
+					default:
+						slog.Error("unknown message type: ", "type", mi.MsgType)
+					case UserTokenUpdate:
+						keys := mi.Key.(string)
+						key := gmdbx.String(&keys)
+						val := gmdbx.Bytes(&mi.Content)
+						gerr = wtx.Put(db.users, &key, &val, gmdbx.PutUpsert)
+						if gerr != gmdbx.ErrSuccess {
+							slog.Error("put user token failed: ", "err", gerr)
+							continue
+						}
+					}
+
+				}
+				wtx.Commit()
+			}
+		}
+	}(ctx)
+
+	return db
+}
+
+func (db *DB) Close() error {
+
+	err := db.env.CloseDBI(db.users)
+	if err != gmdbx.ErrSuccess {
+		slog.Error("close users db failed: ", "err", err)
+		return fmt.Errorf("close users db failed: %v", err)
+	}
+
+	err = db.env.CloseDBI(db.rels)
+	if err != gmdbx.ErrSuccess {
+		slog.Error("close rels db failed: ", "err", err)
+		return fmt.Errorf("close rels db failed: %v", err)
+	}
+
+	err = db.env.CloseDBI(db.convsUsers)
+	if err != gmdbx.ErrSuccess {
+		slog.Error("close convs users db failed: ", "err", err)
+		return fmt.Errorf("close convs users db failed: %v", err)
+	}
+
+	err = db.env.CloseDBI(db.convsMesgs)
+	if err != gmdbx.ErrSuccess {
+		slog.Error("close convs mesgs db failed: ", "err", err)
+		return fmt.Errorf("close convs mesgs db failed: %v", err)
+	}
+
+	err = db.env.CloseDBI(db.mesgs)
+	if err != gmdbx.ErrSuccess {
+		slog.Error("close mesgs db failed: ", "err", err)
+		return fmt.Errorf("close mesgs db failed: %v", err)
+	}
+
+	err = db.env.CloseDBI(db.genv)
+	if err != gmdbx.ErrSuccess {
+		slog.Error("close global env db failed: ", "err", err)
+		return fmt.Errorf("close global env db failed: %v", err)
+	}
+
+	err = db.env.Close(false)
+	if err != gmdbx.ErrSuccess {
+		slog.Error("close db failed: ", "err", err)
+		return fmt.Errorf("close db failed: %v", err)
+	}
+
+	return err
+}
+
+func (d *DB) Wtx() (*gmdbx.Tx, error) {
+	tx := &gmdbx.Tx{}
+	err := d.env.Begin(tx, gmdbx.TxReadWrite)
+	if err != gmdbx.ErrSuccess {
+		return nil, fmt.Errorf("begin tx failed %v", err)
+	}
+	return tx, nil
+}
+
+func (d *DB) Rtx() (*gmdbx.Tx, error) {
+	tx := &gmdbx.Tx{}
+	err := d.env.Begin(tx, gmdbx.TxReadOnly)
+	if err != gmdbx.ErrSuccess {
+		return nil, fmt.Errorf("begin tx failed %v", err)
+	}
+	return tx, nil
+}
