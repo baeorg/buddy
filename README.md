@@ -12,7 +12,7 @@ Introducing ​[Buddy](https://buddy.com), a lightweight yet robust ​Instant M
 - ✅ ​API-Driven Integration: Embed messaging into your app within hours using developer-friendly APIs.
 - ✅ ​Affordable Pricing: Pay-as-you-go model eliminates upfront infrastructure costs, ideal for budget-conscious SMEs.
 
-Whether you’re building a customer support hub, an internal team portal, or a community-driven app, ​**[Buddy](https://buddy.com)** delivers ​99.9% uptime**​ and end-to-end encryption to protect your data.
+Whether you’re building a customer support hub, an internal team portal, or a community-driven app, ​**[Buddy](https://buddy.com) delivers ​99.9% uptime**​ and end-to-end encryption to protect your data.
 
 **Why SMEs Choose Us:​**
 - ✨ ​No Code/Low Code: Deploy with minimal technical expertise.
