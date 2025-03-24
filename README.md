@@ -2,8 +2,9 @@
 An IM system designed specifically for small and medium-sized apps, capable of supporting millions of users online.
 
 ## Introduction
- Empower Your Business with Scalable Communication​
- Introducing ​[Buddy], a lightweight yet robust ​Instant Messaging (IM) platform​ tailored for ​small and medium-sized enterprises (SMEs). Built to handle ​millions of concurrent users, our system combines enterprise-grade reliability with cost-efficiency, ensuring seamless communication for growing businesses.
+Empower Your Business with Scalable Communication​
+
+Introducing ​[Buddy], a lightweight yet robust ​Instant Messaging (IM) platform​ tailored for ​small and medium-sized enterprises (SMEs). Built to handle ​millions of concurrent users, our system combines enterprise-grade reliability with cost-efficiency, ensuring seamless communication for growing businesses.
 
 **Key Features:​**
 - ✅ ​High Scalability: Effortlessly scale from 1 to 1,000,000+ users with cloud-native architecture.
