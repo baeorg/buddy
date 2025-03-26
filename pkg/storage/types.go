@@ -1,17 +1,19 @@
 package storage
 
-type MesgType uint64
-
-const (
-	UserTokenUpdate MesgType = 6000 + iota
+import (
+	"github.com/baeorg/buddy/pkg/types"
+	"github.com/sunvim/gmdbx"
 )
-
-type MesgInfo struct {
-	MsgType MesgType
-	Key     any
-	Content []byte
-}
 
 const (
 	PermiPrefix string = "tokens:"
+)
+
+type MesgHandler func(mi *types.MesgInfo, wtx *gmdbx.Tx, dbi gmdbx.DBI) error
+
+var (
+	mesgHandlers = map[types.MesgType]MesgHandler{
+		types.UserTokenUpdate:   UserTokenUpdateHandler,
+		types.ConvsessionCreate: ConvsCreateHandler,
+	}
 )

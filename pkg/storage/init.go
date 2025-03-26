@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/baeorg/buddy/pkg/share"
+	"github.com/baeorg/buddy/pkg/types"
 	"github.com/sunvim/gmdbx"
 	"github.com/sunvim/mq"
 	"github.com/vmihailenco/msgpack/v5"
@@ -186,7 +187,7 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 	go func(ctx context.Context) {
 
 		var (
-			mi   MesgInfo
+			mi   types.MesgInfo
 			gerr gmdbx.Error
 		)
 
@@ -240,22 +241,19 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 						continue
 					}
 
-					switch mi.MsgType {
-					default:
+					handler, ok := mesgHandlers[mi.MsgType]
+					if !ok {
 						slog.Error("unknown message type: ", "type", mi.MsgType)
-					case UserTokenUpdate:
-						keys := mi.Key.(string)
-						key := gmdbx.String(&keys)
-						val := gmdbx.Bytes(&mi.Content)
-						gerr = wtx.Put(db.users, &key, &val, gmdbx.PutUpsert)
-						if gerr != gmdbx.ErrSuccess {
-							slog.Error("put user token failed: ", "err", gerr)
-							continue
-						}
+						continue
 					}
-
+					err = handler(&mi, wtx, db.genv)
+					if err != nil {
+						slog.Error("handle message failed: ", "err", err)
+						continue
+					}
 				}
 				wtx.Commit()
+				slog.Info("message processed", "count", len(mesgs))
 			}
 		}
 	}(ctx)

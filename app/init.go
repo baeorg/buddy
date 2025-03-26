@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"github.com/baeorg/buddy/pkg/storage"
+	"github.com/baeorg/buddy/pkg/taskpool"
 )
 
 func InitBootSystem(ctx context.Context) {
 	InitLog()
 	storage.InitDB(ctx)
+	taskpool.InitTaskPool(ctx)
 }
 
 func Release() {

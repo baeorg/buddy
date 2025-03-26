@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -28,6 +29,8 @@ func Entrypoint(cmd *cobra.Command, args []string) {
 		AppName:               "Buddy Server",
 		Prefork:               false,
 		ServerHeader:          "Buddy Server",
+		JSONEncoder:           sonic.Marshal,
+		JSONDecoder:           sonic.Unmarshal,
 	})
 
 	app.Use(logger.New(logger.Config{
@@ -41,6 +44,7 @@ func Entrypoint(cmd *cobra.Command, args []string) {
 
 	})
 
+	SetRoute(app)
 	mux := adaptor.FiberApp(app)
 	addr := viper.GetString("server.webaddr")
 	webEngine := nbhttp.NewEngine(nbhttp.Config{
@@ -101,7 +105,7 @@ func Entrypoint(cmd *cobra.Command, args []string) {
 	slog.Info("service shutdown")
 	cancel()
 	// wait clean code execution compeleted
-	time.Sleep(5 * time.Second)
+	time.Sleep(time.Second)
 
 	return
 }

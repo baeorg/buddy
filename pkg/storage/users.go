@@ -8,9 +8,9 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
-func (d *DB) UpdatePermission(userID string, token string) error {
-	mi := &MesgInfo{
-		MsgType: UserTokenUpdate,
+func UpdatePermission(userID string, token string) error {
+	mi := &types.MesgInfo{
+		MsgType: types.UserTokenUpdate,
 		Key:     PermiPrefix + userID,
 		Content: []byte(token),
 	}
@@ -18,10 +18,10 @@ func (d *DB) UpdatePermission(userID string, token string) error {
 	if err != nil {
 		return err
 	}
-	return d.Put(ms)
+	return dbHandler.Put(ms)
 }
 
-func (d *DB) IsPermit(userID string, token string) bool {
+func IsPermit(userID string, token string) bool {
 
 	rtx, err := dbHandler.Rtx()
 	if err != nil {
@@ -33,9 +33,9 @@ func (d *DB) IsPermit(userID string, token string) bool {
 	tokenKey := PermiPrefix + userID
 	key := gmdbx.String(&tokenKey)
 	val := gmdbx.Val{}
-	xerr := rtx.Get(dbHandler.users, &key, &val)
+	xerr := rtx.Get(dbHandler.genv, &key, &val)
 	if xerr != gmdbx.ErrSuccess {
-		slog.Error("failed to get permission for user ", "user id", userID, "err", err)
+		slog.Error("failed to get permission for user ", "user id", tokenKey, "err", xerr)
 		return false
 	}
 	if token == val.String() {
@@ -45,18 +45,18 @@ func (d *DB) IsPermit(userID string, token string) bool {
 	return false
 }
 
-func (d *DB) CreateUser(user *types.User) error {
+func CreateUser(user *types.User) error {
 	return nil
 }
 
-func (d *DB) DeleteUser(userID string) error {
+func DeleteUser(userID string) error {
 	return nil
 }
 
-func (d *DB) UpdateUser(user *types.User) error {
+func UpdateUser(user *types.User) error {
 	return nil
 }
 
-func (d *DB) GetUser(userID string) (*types.User, error) {
+func GetUser(userID string) (*types.User, error) {
 	return nil, nil
 }
