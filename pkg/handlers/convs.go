@@ -3,6 +3,7 @@ package handlers
 import (
 	"log/slog"
 
+	"github.com/baeorg/buddy/pkg/share"
 	"github.com/baeorg/buddy/pkg/storage"
 	"github.com/baeorg/buddy/pkg/types"
 	"github.com/bytedance/sonic"
@@ -26,6 +27,11 @@ func ConvsCreate(req []byte) (rsp []byte, err error) {
 	if err != nil {
 		slog.Error("failed to unmarshal request", "error", err)
 		return nil, err
+	}
+
+	if len(reqt.UserIDs) < 2 {
+		slog.Error("at least two users are required")
+		return nil, share.ErrAtLeastTwoUsers
 	}
 
 	convsID := storage.GetNextConvID()
