@@ -8,11 +8,12 @@ import (
 	"github.com/sunvim/gmdbx"
 )
 
-func UserTokenUpdateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx, dbi gmdbx.DBI) error {
+func UserTokenUpdateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
 	keys := mi.Key.(string)
 	key := gmdbx.String(&keys)
-	val := gmdbx.Bytes(&mi.Content)
-	gerr := wtx.Put(dbi, &key, &val, gmdbx.PutUpsert)
+	msgVal := mi.Content.([]byte)
+	val := gmdbx.Bytes(&msgVal)
+	gerr := wtx.Put(dbHandler.users, &key, &val, gmdbx.PutUpsert)
 	if gerr != gmdbx.ErrSuccess {
 		slog.Error("put user token failed: ", "err", gerr)
 		return fmt.Errorf("failed to update user token: %v", gerr)
@@ -21,15 +22,47 @@ func UserTokenUpdateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx, dbi gmdbx.DBI) er
 	return nil
 }
 
-func ConvsCreateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx, dbi gmdbx.DBI) error {
+func ConvsCreateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
 	convID := mi.Key.(uint64)
 	conv := gmdbx.U64(&convID)
-	val := gmdbx.Bytes(&mi.Content)
-	gerr := wtx.Put(dbi, &conv, &val, gmdbx.PutUpsert)
+
+	msgVal := mi.Content.([]byte)
+	val := gmdbx.Bytes(&msgVal)
+
+	gerr := wtx.Put(dbHandler.convsUsers, &conv, &val, gmdbx.PutUpsert)
 	if gerr != gmdbx.ErrSuccess {
 		slog.Error("put conversation failed: ", "err", gerr)
 		return fmt.Errorf("failed to create conversation: %v", gerr)
 	}
 	slog.Info("conversation created", "conversation id", convID)
+	return nil
+}
+
+func MesgSendHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
+	msgID := mi.Key.(uint64)
+	msg := gmdbx.U64(&msgID)
+
+	msgVal := mi.Content.([]byte)
+	val := gmdbx.Bytes(&msgVal)
+	gerr := wtx.Put(dbHandler.mesgs, &msg, &val, gmdbx.PutUpsert)
+	if gerr != gmdbx.ErrSuccess {
+		slog.Error("put message failed: ", "err", gerr)
+		return fmt.Errorf("failed to send message: %v", gerr)
+	}
+	slog.Info("message sent", "message id", msgID)
+	return nil
+}
+
+func MesgConvsSaveHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
+	msgID := mi.Key.(uint64)
+	msg := gmdbx.U64(&msgID)
+	msgVal := mi.Content.(uint64)
+	val := gmdbx.U64(&msgVal)
+	gerr := wtx.Put(dbHandler.convsMesgs, &msg, &val, gmdbx.PutUpsert)
+	if gerr != gmdbx.ErrSuccess {
+		slog.Error("put message failed: ", "err", gerr)
+		return fmt.Errorf("failed to send message: %v", gerr)
+	}
+	slog.Info("message sent", "message id", msgID)
 	return nil
 }

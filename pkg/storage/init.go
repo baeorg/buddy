@@ -103,17 +103,17 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 		log.Fatal("open users db failed: ", err)
 	}
 
-	db.rels, err = tx.OpenDBI(SubDBRels, gmdbx.DBCreate|gmdbx.DBDupSort)
+	db.rels, err = tx.OpenDBI(SubDBRels, gmdbx.DBCreate|gmdbx.DBIntegerKey|gmdbx.DBDupSort)
 	if err != gmdbx.ErrSuccess {
 		log.Fatal("open rels db failed: ", err)
 	}
 
-	db.convsUsers, err = tx.OpenDBI(SubDBConvsUsers, gmdbx.DBCreate|gmdbx.DBIntegerKey)
+	db.convsUsers, err = tx.OpenDBI(SubDBConvsUsers, gmdbx.DBCreate|gmdbx.DBIntegerKey|gmdbx.DBDupSort)
 	if err != gmdbx.ErrSuccess {
 		log.Fatal("open convs db failed: ", err)
 	}
 
-	db.convsMesgs, err = tx.OpenDBI(SubDBConvsMesgs, gmdbx.DBCreate|gmdbx.DBIntegerKey)
+	db.convsMesgs, err = tx.OpenDBI(SubDBConvsMesgs, gmdbx.DBCreate|gmdbx.DBIntegerKey|gmdbx.DBDupSort)
 	if err != gmdbx.ErrSuccess {
 		log.Fatal("open convs db failed: ", err)
 	}
@@ -187,8 +187,7 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 	go func(ctx context.Context) {
 
 		var (
-			mi   types.MesgInfo
-			gerr gmdbx.Error
+			mi types.MesgInfo
 		)
 
 		for {
@@ -246,7 +245,8 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 						slog.Error("unknown message type: ", "type", mi.MsgType)
 						continue
 					}
-					err = handler(&mi, wtx, db.genv)
+
+					err = handler(&mi, wtx)
 					if err != nil {
 						slog.Error("handle message failed: ", "err", err)
 						continue

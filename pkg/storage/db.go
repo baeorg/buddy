@@ -23,6 +23,10 @@ func GetNextConvID() uint64 {
 	return dbHandler.seqm[SeqmConvs].Add(1)
 }
 
+func GetNextMesgID() uint64 {
+	return dbHandler.seqm[SeqmMesgs].Add(1)
+}
+
 func SaveDataIntoDB(data []byte) error {
 	return dbHandler.Put(data)
 }

@@ -9,11 +9,12 @@ const (
 	PermiPrefix string = "tokens:"
 )
 
-type MesgHandler func(mi *types.MesgInfo, wtx *gmdbx.Tx, dbi gmdbx.DBI) error
+type MesgHandler func(mi *types.MesgInfo, wtx *gmdbx.Tx) error
 
 var (
 	mesgHandlers = map[types.MesgType]MesgHandler{
-		types.UserTokenUpdate:   UserTokenUpdateHandler,
-		types.ConvsessionCreate: ConvsCreateHandler,
+		types.EventTokenSet:   UserTokenUpdateHandler,
+		types.EventConvCreate: ConvsCreateHandler,
+		types.EventMesgSend:   MesgSendHandler,
 	}
 )

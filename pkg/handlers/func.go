@@ -10,5 +10,9 @@ var (
 		types.KindConvsUpdate: ConvsUpdate,
 		types.KindConvsGet:    ConvsGet,
 		types.KindConvsDelete: ConvsDelete,
+		types.KindMesgCreate:  EventMesgSend,
+		types.KindMesgUpdate:  EventMesgEdit,
+		types.KindMesgRemove:  EventMesgRemove,
+		types.KindMesgGet:     EventMesgGet,
 	}
 )

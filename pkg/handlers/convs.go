@@ -11,7 +11,7 @@ import (
 )
 
 type ConvsReq struct {
-	Title   string   `json:"title"`
+	Title   string   `json:"title" validate:"required"`
 	UserIDs []uint64 `json:"user_ids" validate:"required"`
 }
 
@@ -37,7 +37,7 @@ func ConvsCreate(req []byte) (rsp []byte, err error) {
 	convsID := storage.GetNextConvID()
 
 	mi := types.MesgInfo{
-		MsgType: types.ConvsessionCreate,
+		MsgType: types.EventConvCreate,
 		Key:     convsID,
 		Content: req,
 	}
