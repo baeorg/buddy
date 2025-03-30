@@ -5,12 +5,12 @@ import (
 	"strconv"
 
 	"github.com/baeorg/buddy/pkg/helper"
+	"github.com/baeorg/buddy/pkg/share"
 	"github.com/baeorg/buddy/pkg/storage"
 	"github.com/baeorg/buddy/pkg/taskpool"
 	"github.com/baeorg/buddy/pkg/types"
 	"github.com/bytedance/sonic"
 	"github.com/lesismal/nbio/nbhttp/websocket"
-	"github.com/vmihailenco/msgpack/v5"
 )
 
 type MesgSendReq struct {
@@ -24,18 +24,21 @@ type MesgSendRes struct {
 }
 
 type MesgOnLine struct {
-	MesgID  uint64 `json:"mesg_id"`
-	Payload []byte `json:"payload"`
+	MesgID uint64 `json:"mesg_id"`
+	Body   []byte `json:"body"`
 }
 
 func EventMesgSend(req []byte) ([]byte, error) {
 
 	var mreq MesgSendReq
-	if err := sonic.Unmarshal(req, &mreq); err != nil {
-		return nil, err
+
+	err := sonic.Unmarshal(req, &mreq)
+	if err != nil {
+		slog.Error("failed to unmarshal request", "error", err)
+		return nil, share.ErrInvalidRequest
 	}
 
-	err := helper.Validate.Struct(mreq)
+	err = helper.Validate.Struct(mreq)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +52,7 @@ func EventMesgSend(req []byte) ([]byte, error) {
 		Content: req,
 	}
 
-	body, err := msgpack.Marshal(&mi)
+	body, err := sonic.Marshal(&mi)
 	if err != nil {
 		slog.Error("failed to marshal message info", "error", err)
 		return nil, err
@@ -63,7 +66,7 @@ func EventMesgSend(req []byte) ([]byte, error) {
 		Content: mesgID,
 	}
 
-	body, err = msgpack.Marshal(&cmi)
+	body, err = sonic.Marshal(&cmi)
 	if err != nil {
 		slog.Error("failed to marshal message info", "error", err)
 		return nil, err
@@ -94,8 +97,8 @@ func EventMesgSend(req []byte) ([]byte, error) {
 		}
 
 		mo := &MesgOnLine{
-			MesgID:  mesgID,
-			Payload: req,
+			MesgID: mesgID,
+			Body:   req,
 		}
 
 		mos, err := sonic.Marshal(&mo)

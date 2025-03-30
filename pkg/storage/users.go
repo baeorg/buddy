@@ -4,24 +4,24 @@ import (
 	"log/slog"
 
 	"github.com/baeorg/buddy/pkg/types"
+	"github.com/bytedance/sonic"
 	"github.com/sunvim/gmdbx"
-	"github.com/vmihailenco/msgpack/v5"
 )
 
-func UpdatePermission(userID string, token string) error {
+func UpdatePermission(userID uint64, token string) error {
 	mi := &types.MesgInfo{
 		MsgType: types.EventTokenSet,
-		Key:     PermiPrefix + userID,
-		Content: []byte(token),
+		Key:     userID,
+		Content: token,
 	}
-	ms, err := msgpack.Marshal(mi)
+	ms, err := sonic.Marshal(mi)
 	if err != nil {
 		return err
 	}
 	return dbHandler.Put(ms)
 }
 
-func IsPermit(userID string, token string) bool {
+func IsPermit(userID uint64, token string) bool {
 
 	rtx, err := dbHandler.Rtx()
 	if err != nil {
@@ -30,12 +30,11 @@ func IsPermit(userID string, token string) bool {
 	}
 	defer rtx.Commit()
 
-	tokenKey := PermiPrefix + userID
-	key := gmdbx.String(&tokenKey)
+	key := gmdbx.U64(&userID)
 	val := gmdbx.Val{}
-	xerr := rtx.Get(dbHandler.genv, &key, &val)
+	xerr := rtx.Get(dbHandler.permits, &key, &val)
 	if xerr != gmdbx.ErrSuccess {
-		slog.Error("failed to get permission for user ", "user id", tokenKey, "err", xerr)
+		slog.Error("failed to get permission for user ", "user id", key, "err", xerr)
 		return false
 	}
 	if token == val.String() {

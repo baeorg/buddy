@@ -3,7 +3,6 @@ package manager
 import (
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"github.com/baeorg/buddy/pkg/helper"
 	"github.com/baeorg/buddy/pkg/storage"
@@ -24,8 +23,7 @@ func RegisterUserIM(c *fiber.Ctx) error {
 	}
 
 	// Register the user
-	userid := strconv.FormatInt(int64(req.ID), 10)
-	err = storage.UpdatePermission(userid, req.Token)
+	err = storage.UpdatePermission(req.ID, req.Token)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).SendString("Internal Server Error:" + err.Error())
 	}

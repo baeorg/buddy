@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"runtime"
 	"time"
 
 	"github.com/baeorg/buddy/pkg/share"
 	"github.com/baeorg/buddy/pkg/types"
+	"github.com/bytedance/sonic"
 	"github.com/sunvim/gmdbx"
 	"github.com/sunvim/mq"
-	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/atomic"
 )
 
@@ -31,8 +32,9 @@ var (
 )
 
 const (
-	SubDBSize       = 6
+	SubDBSize       = 7
 	SubDBUsers      = "users"       // store user info
+	SubDBPermits    = "permits"     // store user permissions
 	SubDBRels       = "user:rels"   // store user relationships
 	SubDBConvsUsers = "convs:users" // store conversation users
 	SubDBConvsMesgs = "convs:mesgs" // store conversation messages
@@ -50,6 +52,7 @@ type DB struct {
 	seqm       map[string]*atomic.Uint64
 	env        *gmdbx.Env
 	users      gmdbx.DBI
+	permits    gmdbx.DBI
 	rels       gmdbx.DBI
 	convsUsers gmdbx.DBI
 	convsMesgs gmdbx.DBI
@@ -103,6 +106,11 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 		log.Fatal("open users db failed: ", err)
 	}
 
+	db.permits, err = tx.OpenDBI(SubDBPermits, gmdbx.DBCreate|gmdbx.DBIntegerKey)
+	if err != gmdbx.ErrSuccess {
+		log.Fatal("open users db failed: ", err)
+	}
+
 	db.rels, err = tx.OpenDBI(SubDBRels, gmdbx.DBCreate|gmdbx.DBIntegerKey|gmdbx.DBDupSort)
 	if err != gmdbx.ErrSuccess {
 		log.Fatal("open rels db failed: ", err)
@@ -147,12 +155,12 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 		db.seqm[SeqmMesgs] = atomic.NewUint64(0)
 	} else {
 		db.seqm[SeqmMesgs] = atomic.NewUint64(mesgval.U64())
+		slog.Info("message id", "message id", mesgval.U64())
 	}
 
 	// init conversation id
 	convid := gmdbx.String(&SeqmConvs)
 	convval := gmdbx.Val{}
-	db.seqm[SeqmConvs] = atomic.NewUint64(0)
 
 	err = tx.Get(db.genv, &convid, &convval)
 	if err != gmdbx.ErrSuccess && err != gmdbx.ErrNotFound {
@@ -161,7 +169,8 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 	if err == gmdbx.ErrNotFound {
 		db.seqm[SeqmConvs] = atomic.NewUint64(0)
 	} else {
-		db.seqm[SeqmConvs] = atomic.NewUint64(mesgval.U64())
+		db.seqm[SeqmConvs] = atomic.NewUint64(convval.U64())
+		slog.Info("conversation id", "conversation id", convval.U64())
 	}
 
 	// remove message which is consumed every 30 seconds
@@ -185,6 +194,8 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 
 	// batch wirte data into database
 	go func(ctx context.Context) {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
 
 		var (
 			mi types.MesgInfo
@@ -200,14 +211,29 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 				if err != nil {
 					slog.Error("save sequence tx failed: ", "err", err)
 				}
-				genv := db.genv
-				wtx.Put(genv, &mesgid, &mesgval, gmdbx.PutUpsert)
+
+				mkey := gmdbx.String(&SeqmMesgs)
+				xerr := wtx.Put(db.genv, &mkey, &mesgval, gmdbx.PutUpsert)
+				if xerr != gmdbx.ErrSuccess {
+					slog.Error("save message sequence failed: ", "err", xerr)
+				}
+
+				slog.Info("message sequence", "msg id", msq)
 
 				conv := db.seqm[SeqmConvs].Load()
 				convval := gmdbx.U64(&conv)
-				wtx.Put(genv, &convid, &convval, gmdbx.PutUpsert)
+				ckey := gmdbx.String(&SeqmConvs)
+				xerr = wtx.Put(db.genv, &ckey, &convval, gmdbx.PutUpsert)
+				if xerr != gmdbx.ErrSuccess {
+					slog.Error("save conv sequence failed: ", "err", xerr)
+				}
 
-				wtx.Commit()
+				slog.Info("convs sequence", "key", SeqmConvs, "convs id", conv)
+
+				werr := wtx.Commit()
+				if werr != gmdbx.ErrSuccess {
+					slog.Error("commit sequence failed: ", "err", werr)
+				}
 
 				slog.Info("sequence saved")
 				// close database
@@ -234,7 +260,7 @@ func New(ctx context.Context, path string, mqPath string) *DB {
 
 				// write data into database
 				for _, mesg := range mesgs {
-					err := msgpack.Unmarshal(mesg.Data, &mi)
+					err := sonic.Unmarshal(mesg.Data, &mi)
 					if err != nil {
 						slog.Error("unmarshal message failed: ", "err", err)
 						continue
@@ -267,6 +293,12 @@ func (db *DB) Close() error {
 	if err != gmdbx.ErrSuccess {
 		slog.Error("close users db failed: ", "err", err)
 		return fmt.Errorf("close users db failed: %v", err)
+	}
+
+	err = db.env.CloseDBI(db.permits)
+	if err != gmdbx.ErrSuccess {
+		slog.Error("close permits db failed: ", "err", err)
+		return fmt.Errorf("close permits db failed: %v", err)
 	}
 
 	err = db.env.CloseDBI(db.rels)

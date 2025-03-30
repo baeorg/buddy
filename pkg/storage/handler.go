@@ -9,11 +9,11 @@ import (
 )
 
 func UserTokenUpdateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
-	keys := mi.Key.(string)
-	key := gmdbx.String(&keys)
-	msgVal := mi.Content.([]byte)
-	val := gmdbx.Bytes(&msgVal)
-	gerr := wtx.Put(dbHandler.users, &key, &val, gmdbx.PutUpsert)
+	keys := uint64(mi.Key.(float64))
+	key := gmdbx.U64(&keys)
+	msgVal := mi.Content.(string)
+	val := gmdbx.String(&msgVal)
+	gerr := wtx.Put(dbHandler.permits, &key, &val, gmdbx.PutUpsert)
 	if gerr != gmdbx.ErrSuccess {
 		slog.Error("put user token failed: ", "err", gerr)
 		return fmt.Errorf("failed to update user token: %v", gerr)
@@ -23,11 +23,13 @@ func UserTokenUpdateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
 }
 
 func ConvsCreateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
-	convID := mi.Key.(uint64)
+	slog.Info("conversation created", "mi", mi)
+
+	convID := uint64(mi.Key.(float64))
 	conv := gmdbx.U64(&convID)
 
-	msgVal := mi.Content.([]byte)
-	val := gmdbx.Bytes(&msgVal)
+	msgVal := mi.Content.(string)
+	val := gmdbx.String(&msgVal)
 
 	gerr := wtx.Put(dbHandler.convsUsers, &conv, &val, gmdbx.PutUpsert)
 	if gerr != gmdbx.ErrSuccess {
@@ -39,7 +41,7 @@ func ConvsCreateHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
 }
 
 func MesgSendHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
-	msgID := mi.Key.(uint64)
+	msgID := uint64(mi.Key.(float64))
 	msg := gmdbx.U64(&msgID)
 
 	msgVal := mi.Content.([]byte)
@@ -54,7 +56,7 @@ func MesgSendHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
 }
 
 func MesgConvsSaveHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
-	msgID := mi.Key.(uint64)
+	msgID := uint64(mi.Key.(float64))
 	msg := gmdbx.U64(&msgID)
 	msgVal := mi.Content.(uint64)
 	val := gmdbx.U64(&msgVal)

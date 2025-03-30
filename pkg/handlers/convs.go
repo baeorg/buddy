@@ -7,7 +7,6 @@ import (
 	"github.com/baeorg/buddy/pkg/storage"
 	"github.com/baeorg/buddy/pkg/types"
 	"github.com/bytedance/sonic"
-	"github.com/vmihailenco/msgpack/v5"
 )
 
 type ConvsReq struct {
@@ -23,10 +22,11 @@ func ConvsCreate(req []byte) (rsp []byte, err error) {
 	var (
 		reqt ConvsReq
 	)
+
 	err = sonic.Unmarshal(req, &reqt)
 	if err != nil {
-		slog.Error("failed to unmarshal request", "error", err)
-		return nil, err
+		slog.Error("failed to convert request to ConvsReq")
+		return nil, share.ErrInvalidRequest
 	}
 
 	if len(reqt.UserIDs) < 2 {
@@ -42,7 +42,7 @@ func ConvsCreate(req []byte) (rsp []byte, err error) {
 		Content: req,
 	}
 
-	body, err := msgpack.Marshal(&mi)
+	body, err := sonic.Marshal(&mi)
 	if err != nil {
 		slog.Error("failed to marshal message info", "error", err)
 		return nil, err

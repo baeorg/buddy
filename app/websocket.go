@@ -43,12 +43,15 @@ func newUpgrader() *websocket.Upgrader {
 				Mesg: share.Success.Error(),
 			}
 		)
+
 		if err := sonic.Unmarshal(data, &wsreq); err != nil {
 			slog.Error("Failed to unmarshal WsReq", "error", err)
 			wsrsp.Code = share.ErrInvalidRequestCode
 			wsrsp.Mesg = share.ErrInvalidRequest.Error()
 			goto END
 		}
+
+		slog.Info("Received WsReq", "kind", wsreq.Kind, "req", wsreq.Reqs)
 
 		if handler, ok := handlers.HandlerMap[wsreq.Kind]; ok {
 			rs, err := handler(wsreq.Reqs)
@@ -92,7 +95,14 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("User connected", "userid", userid, "token", userToken, "remoteAddr", r.RemoteAddr)
 
-	if !storage.IsPermit(userid, userToken) {
+	uid, err := strconv.ParseUint(userid, 10, 64)
+	if err != nil {
+		slog.Error("Failed to parse user id", "error", err)
+		http.Error(w, "Failed to parse user id", http.StatusBadRequest)
+		return
+	}
+
+	if !storage.IsPermit(uid, userToken) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -100,13 +110,6 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("Failed to upgrade websocket connection", "error", err)
-	}
-
-	uid, err := strconv.ParseUint(userid, 10, 64)
-	if err != nil {
-		slog.Error("Failed to parse user id", "error", err)
-		http.Error(w, "Failed to parse user id", http.StatusBadRequest)
-		return
 	}
 
 	handlers.OnLineUsers.Set(userid, &handlers.User{
