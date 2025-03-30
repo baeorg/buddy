@@ -10,7 +10,7 @@ import (
 
 func UpdatePermission(userID string, token string) error {
 	mi := &types.MesgInfo{
-		MsgType: types.UserTokenUpdate,
+		MsgType: types.EventTokenSet,
 		Key:     PermiPrefix + userID,
 		Content: []byte(token),
 	}

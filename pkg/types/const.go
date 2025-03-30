@@ -1,6 +1,6 @@
 package types
 
-type KindMesg uint64
+type Kind uint64
 
 const (
 	KindConvsCreate = 8000 + iota
