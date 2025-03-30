@@ -109,8 +109,8 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	OnLineUsers.Set(userid, &User{
+	handlers.OnLineUsers.Set(userid, &handlers.User{
 		ID:   uid,
-		conn: conn,
+		Conn: conn,
 	})
 }

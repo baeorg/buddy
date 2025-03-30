@@ -1,4 +1,4 @@
-package app
+package handlers
 
 import (
 	"github.com/lesismal/nbio/nbhttp/websocket"
@@ -11,5 +11,5 @@ var (
 
 type User struct {
 	ID   uint64
-	conn *websocket.Conn
+	Conn *websocket.Conn
 }

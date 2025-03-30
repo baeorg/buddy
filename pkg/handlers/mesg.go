@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"log/slog"
+	"strconv"
 
 	"github.com/baeorg/buddy/pkg/helper"
 	"github.com/baeorg/buddy/pkg/storage"
 	"github.com/baeorg/buddy/pkg/taskpool"
 	"github.com/baeorg/buddy/pkg/types"
 	"github.com/bytedance/sonic"
+	"github.com/lesismal/nbio/nbhttp/websocket"
 	"github.com/vmihailenco/msgpack/v5"
 )
 
@@ -19,6 +21,11 @@ type MesgSendReq struct {
 
 type MesgSendRes struct {
 	MesgID uint64 `json:"mesg_id"`
+}
+
+type MesgOnLine struct {
+	MesgID  uint64 `json:"mesg_id"`
+	Payload []byte `json:"payload"`
 }
 
 func EventMesgSend(req []byte) ([]byte, error) {
@@ -74,6 +81,54 @@ func EventMesgSend(req []byte) ([]byte, error) {
 
 	// send message to users
 	taskpool.Workers.AddTask(func() (any, error) {
+		fromid, err := strconv.ParseUint(mreq.FromID, 10, 64)
+		if err != nil {
+			slog.Error("failed to parse from_id", "error", err)
+			return nil, err
+		}
+
+		users, err := storage.GetUsersByConvID(mreq.ConvsID)
+		if err != nil {
+			slog.Error("failed to get users by convID", "error", err)
+			return nil, err
+		}
+
+		mo := &MesgOnLine{
+			MesgID:  mesgID,
+			Payload: req,
+		}
+
+		mos, err := sonic.Marshal(&mo)
+		if err != nil {
+			slog.Error("failed to marshal message", "error", err)
+			return nil, err
+		}
+
+		count := 3
+
+		for _, user := range users {
+			if user == fromid {
+				continue
+			}
+			toUser := strconv.FormatUint(user, 10)
+			u, ok := OnLineUsers.Get(toUser)
+			if !ok {
+				continue
+			}
+
+			// if send message failed, retry 3 times
+			count = 3
+		REPEAT:
+			err = u.Conn.WriteMessage(websocket.TextMessage, mos)
+			if err != nil {
+				count -= 1
+				if count <= 0 {
+					continue
+				}
+				goto REPEAT
+			}
+		}
+
 		return nil, nil
 	})
 
