@@ -9,9 +9,10 @@ export function CreateConversationModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (type: ChatType) => void;
+  onCreate: (type: ChatType, title: string, user_ids: number[]) => void;
 }) {
   const [selectedType, setSelectedType] = useState<ChatType>("single");
+  const [userId, setUserId] = useState<number | null>(null);
 
   return isOpen ? (
     <div
@@ -23,7 +24,7 @@ export function CreateConversationModal({
       <div className="bg-white rounded-lg p-6 w-80">
         <h3 className="text-lg font-semibold mb-4">创建新对话</h3>
 
-        <div className="space-y-3 mb-6">
+        <div className="flex items-center gap-2 mb-6">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="radio"
@@ -47,6 +48,20 @@ export function CreateConversationModal({
           </label>
         </div>
 
+        {selectedType === "single" && (
+          <div className="mb-6">
+            <input
+              type="text"
+              placeholder="请输入用户ID"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={userId ? userId.toString() : ""}
+              onChange={(e) =>
+                setUserId(e.target.value ? parseInt(e.target.value) : null)
+              }
+            />
+          </div>
+        )}
+
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -56,8 +71,12 @@ export function CreateConversationModal({
           </button>
           <button
             onClick={() => {
-              onCreate(selectedType);
-              onClose();
+              if (userId) {
+                onCreate(selectedType, userId + "", [userId]);
+                onClose();
+              } else {
+                alert("请选择用户");
+              }
             }}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >

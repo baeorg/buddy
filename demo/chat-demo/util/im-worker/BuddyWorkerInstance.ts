@@ -61,8 +61,8 @@ class BuddyWorkerInstance {
     accountId,
     token,
   }: {
-    payload: string;
-    accountId: string;
+    payload: any;
+    accountId: number;
     token: string;
   }) {
     if (this.instance) {
@@ -78,20 +78,21 @@ class BuddyWorkerInstance {
   static createConversation({
     accountId,
     token,
-    type,
+    payload,
   }: {
     accountId: number;
     token: string;
-    type: "single" | "group";
+    payload: {
+      title: string;
+      user_ids: number[];
+    };
   }) {
     if (this.instance) {
       this.instance.postMessage({
         type: "createConversation",
         accountId,
         token,
-        payload: {
-          type,
-        },
+        payload,
       });
     }
   }

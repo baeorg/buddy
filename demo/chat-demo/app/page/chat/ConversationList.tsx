@@ -2,25 +2,37 @@ import { useState } from "react";
 import { CreateConversationModal } from "./CreateConversationModal";
 import { useNavigate } from "react-router";
 import BuddyWorkerInstance from "util/im-worker/BuddyWorkerInstance";
-
-type ChatType = "single" | "group";
-type ConnectionStatus = "connected" | "connecting" | "disconnected";
+import type { MessageStore } from "~/hook/useMessages";
+import type { Conversation, ChatType, ConnectionStatus } from "~/types";
 
 interface ConnectionStatusProps {
   status: ConnectionStatus;
   onReconnect?: () => void;
 }
+
 export function ConversationList({
   status,
   onReconnect,
+  onConversationSelect,
+  conversations,
+  setConversations,
+  messageStore,
 }: {
   status: ConnectionStatus;
   onReconnect?: () => void;
+  onConversationSelect?: (conversation: Conversation) => void;
+  messageStore: MessageStore;
+  conversations: Conversation[];
+  setConversations: (conversations: Conversation[]) => void;
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleCreateConversation = (type: ChatType) => {
+  const handleCreateConversation = (
+    type: ChatType,
+    title: string,
+    user_ids: number[]
+  ) => {
     console.log("create conversation", type);
     const accountId = Number(localStorage.getItem("Buddy_AccountId"));
     const token = localStorage.getItem("Buddy_Token");
@@ -33,8 +45,14 @@ export function ConversationList({
       BuddyWorkerInstance.createConversation({
         accountId,
         token,
-        type: "single",
+        payload: {
+          title: title,
+          user_ids: [accountId, ...user_ids],
+        },
       });
+
+      // ConversationListener(IM_CONSTANT.ConvsCreate, title, user_ids);
+      setConversations([...conversations, { id: 0, title, user_ids }]);
     }
   };
 
@@ -56,23 +74,26 @@ export function ConversationList({
 
       {/* ============== CONVERSATION LIST ============== */}
       <div className="flex-1 overflow-y-auto">
-        {MOCK_USERS.map((user) => (
+        {conversations.map((conversation) => (
           <div
-            key={user.id}
+            key={conversation.title}
             className="flex items-center gap-3 p-4 hover:bg-gray-100 cursor-pointer"
+            onClick={() => onConversationSelect?.(conversation)}
           >
             <img
-              src={user.avatar}
-              alt={user.name}
+              src={"/avatar1.png"}
+              alt={conversation.title}
               className="w-12 h-12 rounded-full"
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <h3 className="font-medium truncate">{user.name}</h3>
-                <span className="text-sm text-gray-500">{user.lastTime}</span>
+                <h3 className="font-medium truncate">
+                  {conversation.title}({conversation.id})
+                </h3>
+                <span className="text-sm text-gray-500">{"00:00"}</span>
               </div>
               <p className="text-sm text-gray-500 truncate">
-                {user.lastMessage}
+                {messageStore[conversation.title]?.at(-1)?.content || ""}
               </p>
             </div>
           </div>
@@ -169,20 +190,3 @@ export function ConnectionStatus({
     </div>
   );
 }
-
-const MOCK_USERS = [
-  {
-    id: 1,
-    name: "BAE-DevTeam",
-    avatar: "/avatar1.png",
-    lastMessage: "👋 yst ppp",
-    lastTime: "11:16",
-  },
-  {
-    id: 2,
-    name: "Reelz",
-    avatar: "/avatar2.png",
-    lastMessage: "🎮 Toosii",
-    lastTime: "04:00",
-  },
-];

@@ -110,7 +110,13 @@ class WebSocketClient {
   }
 
   createConversation(payload: any) {
-    this.send({ type: "createConversation", payload });
+    const msgStr = JSON.stringify(payload);
+    const encoder = new TextEncoder();
+    const msgBytes = encoder.encode(msgStr);
+    this.send({
+      kind: 8000,
+      reqs: Array.from(msgBytes),
+    });
   }
 
   private reconnect() {
@@ -145,7 +151,7 @@ class WebSocketClient {
       this.isConnecting = false;
       this.reconnectAttempts = 0;
       self.postMessage({ type: "connected", to: this.config.accountId });
-      this.startHeartbeat();
+      // this.startHeartbeat();
     };
 
     this.ws.onclose = () => {
@@ -240,13 +246,29 @@ self.onmessage = (
       break;
 
     case "createConversation":
+      console.log("createConversation", payload);
       WebSocketManager.getInstance({
         accountId,
       } as WSConfig).createConversation(payload);
       break;
 
     case "send":
-      WebSocketManager.getInstance({ accountId } as WSConfig).send(payload);
+      const content = payload.resq.payload;
+      const encoder = new TextEncoder();
+      const contentBytes = encoder.encode(content);
+      const sendMsg = {
+        ...payload.resq,
+        from_id: String(payload.resq.from_id),
+        convs_id: Number(payload.resq.convs_id),
+        payload: Array.from(contentBytes),
+      };
+      console.log("sendMsg", sendMsg);
+      const resqStr = JSON.stringify(sendMsg);
+
+      WebSocketManager.getInstance({ accountId } as WSConfig).send({
+        ...payload,
+        resq: Array.from(encoder.encode(resqStr)),
+      });
       break;
 
     case "disconnect":
