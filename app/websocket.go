@@ -1,7 +1,6 @@
 package app
 
 import (
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -81,35 +80,30 @@ func newUpgrader() *websocket.Upgrader {
 	return u
 }
 
-type Request struct {
-	ID    uint64 `json:"id"`
-	Token string `json:"token"`
-}
+const (
+	XUserID    = "id"
+	XUserToken = "token"
+)
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("read request body failed:", "err", err)
-		http.Error(w, "wrong body", http.StatusBadRequest)
-		return
-	}
-	var req Request
-	err = sonic.Unmarshal(body, &req)
-	if err != nil {
-		slog.Error("parse body failed:", "err", err)
-		http.Error(w, "wrong body", http.StatusBadRequest)
-		return
-	}
 	// check user permission
-	userid := strconv.FormatUint(req.ID, 10)
-	userToken := req.Token
+	userid := r.URL.Query().Get(XUserID)
+	userToken := r.URL.Query().Get(XUserToken)
+
 	if userid == "" || userToken == "" {
 		http.Error(w, "Unauthorized: user id or user token should be provided", http.StatusUnauthorized)
 		return
 	}
 	slog.Info("User connected", "userid", userid, "token", userToken, "remoteAddr", r.RemoteAddr)
 
-	if !storage.IsPermit(req.ID, userToken) {
+	uid, err := strconv.ParseUint(userid, 10, 64)
+	if err != nil {
+		slog.Error("Failed to parse user id", "error", err)
+		http.Error(w, "Failed to parse user id", http.StatusBadRequest)
+		return
+	}
+
+	if !storage.IsPermit(uid, userToken) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -120,7 +114,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handlers.OnLineUsers.Set(userid, &handlers.User{
-		ID:   req.ID,
+		ID:   uid,
 		Conn: conn,
 	})
 }
