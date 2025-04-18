@@ -44,8 +44,8 @@ func MesgSendHandler(mi *types.MesgInfo, wtx *gmdbx.Tx) error {
 	msgID := uint64(mi.Key.(float64))
 	msg := gmdbx.U64(&msgID)
 
-	msgVal := mi.Content.([]byte)
-	val := gmdbx.Bytes(&msgVal)
+	msgVal := mi.Content.(string)
+	val := gmdbx.String(&msgVal)
 	gerr := wtx.Put(dbHandler.mesgs, &msg, &val, gmdbx.PutUpsert)
 	if gerr != gmdbx.ErrSuccess {
 		slog.Error("put message failed: ", "err", gerr)
