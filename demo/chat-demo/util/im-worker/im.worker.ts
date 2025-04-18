@@ -133,12 +133,13 @@ class WebSocketClient {
   }
 
   private _connect() {
-    this.ws = new WebSocket(this.config.url, [
-      "X-User-ID",
-      this.config.accountId.toString(),
-      "X-User-Token",
-      this.config.token,
-    ]);
+    this.ws = new WebSocket(
+      this.config.url +
+        "?id=" +
+        this.config.accountId +
+        "&token=" +
+        this.config.token
+    );
 
     this.ws.onopen = () => {
       this.isConnecting = false;
