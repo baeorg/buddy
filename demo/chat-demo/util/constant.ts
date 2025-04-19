@@ -1,4 +1,6 @@
 export const IM_CONSTANT = {
+  // 心跳相关的操作类型
+  Heartbeat: 9000,
   // 会话/对话相关的操作类型
   ConvsCreate: 8000,
   ConvsUpdate: 8001,

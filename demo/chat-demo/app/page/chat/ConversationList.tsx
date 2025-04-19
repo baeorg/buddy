@@ -17,6 +17,8 @@ export function ConversationList({
   conversations,
   setConversations,
   messageStore,
+  accountId,
+  token,
 }: {
   status: ConnectionStatus;
   onReconnect?: () => void;
@@ -24,6 +26,8 @@ export function ConversationList({
   messageStore: MessageStore;
   conversations: Conversation[];
   setConversations: (conversations: Conversation[]) => void;
+  accountId: number;
+  token: string;
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const navigate = useNavigate();
@@ -33,9 +37,6 @@ export function ConversationList({
     title: string,
     user_ids: number[]
   ) => {
-    console.log("create conversation", type);
-    const accountId = Number(localStorage.getItem("Buddy_AccountId"));
-    const token = localStorage.getItem("Buddy_Token");
     if (!accountId || !token) {
       navigate("/login");
       return;

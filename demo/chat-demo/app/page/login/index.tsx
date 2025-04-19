@@ -20,7 +20,8 @@ export function Login() {
       if (res === "Created") {
         localStorage.setItem("Buddy_AccountId", accountId);
         localStorage.setItem("Buddy_Token", token);
-        navigate("/chat");
+        localStorage.setItem("Buddy_Username", accountId);
+        navigate(`/chat?id=${accountId}&token=${token}&username=${accountId}`);
       } else {
         alert("Failed to register");
       }

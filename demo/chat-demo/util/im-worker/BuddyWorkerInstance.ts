@@ -5,7 +5,9 @@ class BuddyWorkerInstance {
 
   static getInstance(): Worker {
     if (!this.instance) {
-      this.instance = new Worker(new URL("./im.worker.ts", import.meta.url));
+      this.instance = new Worker(new URL("./im.worker.ts", import.meta.url), {
+        type: "module",
+      });
 
       this.instance.onmessage = (event) => {
         const data = event.data;

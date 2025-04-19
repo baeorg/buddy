@@ -1,11 +1,10 @@
 import { ConversationList } from "./ConversationList";
 import { ChatWindow } from "./ChatWindow";
 import BuddyWorkerInstance from "util/im-worker/BuddyWorkerInstance";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useEffect, useState, useCallback } from "react";
 import { useMessages } from "~/hook/useMessages";
 import { IM_CONSTANT } from "util/constant";
-import { decodeBase64Response } from "util/index";
 
 interface Conversation {
   id: number;
@@ -15,24 +14,29 @@ interface Conversation {
 
 export function Chat() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const [status, setStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("disconnected");
 
   const [accountId, setAccountId] = useState<number | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+
   const [currentConversation, setCurrentConversation] =
     useState<Conversation | null>(null);
-
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
-  const { messageStore, sendMessage, getConversationMessages } =
-    useMessages(accountId);
+  const { messageStore, sendMessage, getConversationMessages } = useMessages(
+    accountId ? Number(accountId) : null,
+    token || null
+  );
 
   const onReconnect = useCallback(() => {
     if (accountId && token) {
       BuddyWorkerInstance.connect({
-        accountId: accountId,
+        accountId: Number(accountId),
         token: token,
         url: "ws://localhost:8760",
       });
@@ -53,38 +57,36 @@ export function Chat() {
   };
 
   useEffect(() => {
-    const accountId = Number(localStorage.getItem("Buddy_AccountId"));
-    const token = localStorage.getItem("Buddy_Token");
+    const accountId = Number(searchParams.get("id"));
+    const token = searchParams.get("token");
+    const username = searchParams.get("username");
+
     if (!accountId || !token) {
       navigate("/login");
       return;
     }
     setAccountId(accountId);
     setToken(token);
+    setUsername(username);
 
     BuddyWorkerInstance.connect({
       accountId: Number(accountId),
-      token,
+      token: token,
       url: "ws://localhost:8760/ws",
     });
-    setStatus("connecting");
 
     const msgListener = (data: any) => {
-      console.log(`message to account(${accountId}):`, data);
       if (data.to === accountId) {
         if (data.type === "disconnected") setStatus("disconnected");
         if (data.type === "connected") setStatus("connected");
         if (data.type === "connecting") setStatus("connecting");
         if (data.type === "message") {
-          const payload = data.payload;
           if (
-            payload.kind === IM_CONSTANT.ConvsCreate &&
-            payload.mesg === "success"
+            data.kind === IM_CONSTANT.ConvsCreate &&
+            data.mesg === "success"
           ) {
             try {
-              const rsp = decodeBase64Response(payload.rsp);
-              console.log("rsp", rsp);
-              updateConversation(rsp.id);
+              updateConversation(data.rsp.id);
             } catch (error) {
               console.error("Failed to parse response:", error);
             }
@@ -98,11 +100,11 @@ export function Chat() {
     return () => {
       BuddyWorkerInstance.removeListener(msgListener);
     };
-  }, []);
+  }, [searchParams, navigate]);
 
   useEffect(() => {
-    console.log("status", status);
-  }, [status]);
+    console.log("messageStore", messageStore);
+  }, [messageStore]);
 
   return (
     <div className="h-screen flex">
@@ -114,6 +116,8 @@ export function Chat() {
           messageStore={messageStore}
           conversations={conversations}
           setConversations={setConversations}
+          accountId={Number(accountId)}
+          token={token || ""}
         />
       </div>
 
@@ -121,11 +125,13 @@ export function Chat() {
         {currentConversation && accountId && (
           <ChatWindow
             currentConversation={currentConversation}
-            messages={getConversationMessages(currentConversation.title)}
-            onSendMessage={(content) =>
-              sendMessage(currentConversation.id.toString(), content)
-            }
-            accountId={accountId}
+            messages={getConversationMessages(
+              currentConversation.id.toString()
+            )}
+            onSendMessage={(content) => {
+              sendMessage(currentConversation.id.toString(), content);
+            }}
+            accountId={Number(accountId)}
           />
         )}
       </div>

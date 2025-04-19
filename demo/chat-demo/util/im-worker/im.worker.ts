@@ -1,13 +1,30 @@
-type WSMessage = {
-  type: string;
-  payload: any;
-};
+import { IM_CONSTANT } from "../constant";
 
 interface WSConfig {
   url: string;
   accountId: number;
   token: string;
 }
+
+const decodeBase64Response = (base64: string) => {
+  if (!base64) {
+    console.error("Empty base64 string");
+    return null;
+  }
+
+  try {
+    const decoded = atob(base64);
+
+    try {
+      return JSON.parse(decoded);
+    } catch (jsonError) {
+      return decoded;
+    }
+  } catch (error) {
+    console.error("Failed to decode base64:", error);
+    return null;
+  }
+};
 
 class WebSocketManager {
   private static instances: Map<number, WebSocketClient> = new Map();
@@ -101,7 +118,10 @@ class WebSocketClient {
   }
 
   connect() {
-    if (this.isConnecting || this.ws?.readyState === WebSocket.OPEN) return;
+    if (this.isConnecting || this.ws?.readyState === WebSocket.OPEN) {
+      self.postMessage({ type: "connected", to: this.config.accountId });
+      return;
+    }
 
     this.isConnecting = true;
     this.reconnectAttempts = 0;
@@ -170,14 +190,15 @@ class WebSocketClient {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data?.type === "pong") {
+        if (data?.kind === IM_CONSTANT.Heartbeat) {
           this.handlePong();
           return;
         }
         self.postMessage({
           type: "message",
-          payload: data,
           to: this.config.accountId,
+          ...data,
+          rsp: data.rsp ? decodeBase64Response(data.rsp) : null,
         });
       } catch (error) {
         self.postMessage({
@@ -253,21 +274,21 @@ self.onmessage = (
       break;
 
     case "send":
-      const content = payload.resq.payload;
+      const content = payload.reqs.payload;
       const encoder = new TextEncoder();
       const contentBytes = encoder.encode(content);
       const sendMsg = {
-        ...payload.resq,
-        from_id: String(payload.resq.from_id),
-        convs_id: Number(payload.resq.convs_id),
+        ...payload.reqs,
+        from_id: String(payload.reqs.from_id),
+        convs_id: Number(payload.reqs.convs_id),
         payload: Array.from(contentBytes),
       };
       console.log("sendMsg", sendMsg);
-      const resqStr = JSON.stringify(sendMsg);
+      const reqsStr = JSON.stringify(sendMsg);
 
       WebSocketManager.getInstance({ accountId } as WSConfig).send({
         ...payload,
-        resq: Array.from(encoder.encode(resqStr)),
+        reqs: Array.from(encoder.encode(reqsStr)),
       });
       break;
 

@@ -1,41 +1,56 @@
 import { useState, useEffect, useCallback } from "react";
 import { IM_CONSTANT } from "util/constant";
+import { v4 as uuidv4 } from "uuid";
 import BuddyWorkerInstance from "util/im-worker/BuddyWorkerInstance";
 
 export interface Message {
-  id: string;
+  clientId: string;
+  id?: string;
   conversationId: string;
   content: string;
   senderId: number;
   timestamp: number;
-  // ... 其他消息属性
 }
 
 export interface MessageStore {
   [conversationId: string]: Message[];
 }
 
-export function useMessages(accountId: number | null) {
+export function useMessages(accountId: number | null, token: string | null) {
   const [messageStore, setMessageStore] = useState<MessageStore>({});
 
   const sendMessage = useCallback(
     (conversationId: string, content: string) => {
-      if (!accountId) return;
+      if (!accountId || !token) return;
 
       BuddyWorkerInstance.sendMessage({
         payload: {
           kind: IM_CONSTANT.MesgCreate,
-          resq: {
+          reqs: {
             from_id: accountId,
             convs_id: conversationId,
             payload: content,
           },
         },
         accountId: accountId,
-        token: localStorage.getItem("Buddy_Token") || "",
+        token: token,
       });
+
+      setMessageStore((prev) => ({
+        ...prev,
+        [conversationId]: [
+          ...(prev[conversationId] || []),
+          {
+            clientId: uuidv4(),
+            content,
+            senderId: accountId,
+            timestamp: Date.now(),
+            conversationId,
+          },
+        ],
+      }));
     },
-    [accountId]
+    [accountId, token]
   );
 
   const getConversationMessages = useCallback(
@@ -60,19 +75,14 @@ export function useMessages(accountId: number | null) {
 
     const handleMessage = (data: any) => {
       if (data.type === "message" && data.to === accountId) {
-        const payload = data.payload;
-        switch (payload.kind) {
+        switch (data.kind) {
           case IM_CONSTANT.MesgCreate:
-            console.log("MesgCreate", payload.rsp);
-            addMessage(payload.rsp);
+            console.log("MesgCreate", data.rsp);
+            // addMessage(data.rsp);
             break;
           case IM_CONSTANT.MesgGet:
-            const messages = payload.rsp;
-            console.log("MesgGet", messages);
-            setMessageStore((prev) => ({
-              ...prev,
-              [payload.convs_id]: messages,
-            }));
+            console.log("MesgGet", data.rsp);
+            // addMessage(data.rsp);
             break;
         }
       }
